@@ -52,6 +52,15 @@ def index() -> None:
     with ui.column().classes("tcss-padded"):
         ui.label("Columned content").classes("tcss-success")
 
+    # --- bindings (NiceGUI homepage text-reversal example) -------------
+    with ui.card().classes("tcss-border tcss-padded"):
+        ui.label("Binding demo: type, the reversal follows").classes("tcss-bold")
+        reversed_source = ui.input("type here")
+        ui.label().bind_text_from(
+            reversed_source, "value",
+            backward=lambda v: (v or "")[::-1],
+        ).classes("tcss-primary")
+
     # --- dialog ---------------------------------------------------------
     with ui.dialog() as dlg, ui.card():
         ui.label("This is a dialog").classes("tcss-bold")

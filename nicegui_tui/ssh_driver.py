@@ -94,8 +94,9 @@ class SSHDriver(Driver):
             self._input_task = None
 
     def stop_application_mode(self) -> None:
-        self._closed = True
-        self.disable_input()
+        # Emit the terminal-restore sequences BEFORE marking the driver closed,
+        # otherwise write() short-circuits and the client's terminal is left in
+        # alt-screen + mouse-reporting mode (visible as "garbage after quit").
         try:
             self.write("\x1b[?2004l")
             if self._mouse:
@@ -103,8 +104,12 @@ class SSHDriver(Driver):
                     self.write(seq)
             self.write("\x1b[?25h")    # Show cursor
             self.write("\x1b[?1049l")  # Leave alt screen
+            # asyncssh flushes automatically; drain() is a coroutine and we
+            # can't await here (Textual calls stop_application_mode sync).
         except Exception:
             pass
+        self._closed = True
+        self.disable_input()
 
     def close(self) -> None:
         self._closed = True
