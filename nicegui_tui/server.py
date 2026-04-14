@@ -63,7 +63,8 @@ async def _handle_session(process: asyncssh.SSHServerProcess) -> None:
         process.exit(1)
         return
 
-    builder = next(iter(_REGISTERED_BUILDERS.values()))
+    # Prefer the '/' route when registered; otherwise fall back to the first.
+    builder = _REGISTERED_BUILDERS.get("/") or next(iter(_REGISTERED_BUILDERS.values()))
 
     term_size = process.get_terminal_size()
     size = (term_size[0] or 80, term_size[1] or 24)
@@ -73,6 +74,15 @@ async def _handle_session(process: asyncssh.SSHServerProcess) -> None:
     def driver_factory(app, **kwargs):
         driver = SSHDriver(app, **kwargs)
         driver.set_process(process, size)
+        # Hook PTY resize: asyncssh calls SSHServerProcess.terminal_size_changed
+        # when the client sends SIGWINCH / window-change. Rebind to forward
+        # into the Textual driver.
+        def _on_resize(width, height, pixwidth=0, pixheight=0, *, _d=driver):
+            _d.on_terminal_resize(width, height)
+        try:
+            process.terminal_size_changed = _on_resize  # type: ignore[method-assign]
+        except Exception:
+            pass
         return driver
 
     try:

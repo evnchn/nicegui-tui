@@ -50,6 +50,17 @@ class SSHDriver(Driver):
         self._process = process
         self._size = size
 
+    def on_terminal_resize(self, width: int, height: int) -> None:
+        """Called from the asyncssh process when the client resizes its PTY."""
+        self._size = (width, height)
+        if self._closed or self._app is None:
+            return
+        try:
+            new_size = Size(width, height)
+            self._app.post_message(events.Resize(new_size, new_size))
+        except Exception:
+            pass
+
     # -- Driver API ------------------------------------------------------
 
     def write(self, data: str) -> None:

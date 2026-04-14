@@ -12,6 +12,7 @@ from pathlib import Path
 SUPPORTED_ELEMENTS = {
     "label", "markdown", "button", "input", "textarea", "checkbox", "switch",
     "radio", "select", "row", "column", "card", "separator", "notify", "dialog",
+    "link", "tabs", "tab", "tab_panels", "tab_panel", "sub_pages",
 }
 
 # Framework-level APIs that are always allowed (not widgets).

@@ -17,6 +17,7 @@ from textual.widgets import (
     Checkbox,
     Input,
     Label,
+    Link,
     Markdown,
     RadioButton,
     RadioSet,
@@ -24,6 +25,8 @@ from textual.widgets import (
     Select,
     Static,
     Switch,
+    TabbedContent,
+    TabPane,
     TextArea,
 )
 
@@ -99,6 +102,18 @@ class NGCard(Vertical, BridgedMixin):
 
 
 class NGPlaceholder(Static, BridgedMixin):
+    pass
+
+
+class NGLink(Link, BridgedMixin):
+    pass
+
+
+class NGTabbedContent(TabbedContent, BridgedMixin):
+    pass
+
+
+class NGTabPane(TabPane, BridgedMixin):
     pass
 
 
@@ -239,6 +254,17 @@ def _make_card(element: "Element") -> Widget:
     return _apply_common(w, element)
 
 
+def _make_link(element: "Element") -> Widget:
+    text = _text_of(element) or element._props.get("label") or element._props.get("href") or "link"
+    href = element._props.get("href") or ""
+    # Textual's Link opens via webbrowser; over SSH that launches on the
+    # server. For now, just display it — future: navigate internal paths.
+    w = NGLink(str(text), url=str(href) if href else None)
+    w.styles.width = "auto"
+    w.styles.height = "auto"
+    return _apply_common(w, element)
+
+
 def _make_dialog(element: "Element") -> Widget:
     # Render dialog as a collapsible card in the TUI. It's shown inline
     # regardless of its open/closed state — sufficient for the POC.
@@ -246,6 +272,24 @@ def _make_dialog(element: "Element") -> Widget:
     w.styles.height = "auto"
     w.styles.border = ("double", "magenta")
     w.border_title = "Dialog"
+    return _apply_common(w, element)
+
+
+def _make_sub_pages(element: "Element") -> Widget:
+    """Render a ui.sub_pages as a Vertical container; its current children
+    correspond to whichever route builder ran.
+    """
+    w = NGColumn()
+    w.styles.height = "auto"
+    w.styles.width = "1fr"
+    w.add_class("tcss-border")
+    return _apply_common(w, element)
+
+
+def _make_tab_panels(element: "Element") -> Widget:
+    """Skeleton TabbedContent. Panes are mounted by the client after this returns."""
+    w = NGTabbedContent()
+    w.styles.height = "auto"
     return _apply_common(w, element)
 
 
@@ -273,6 +317,9 @@ FACTORIES: dict[str, Callable[[Any], Widget]] = {
     "Card": _make_card,
     "Dialog": _make_dialog,
     "Notification": _make_label,  # rendered as a small label; see server.py for toasts
+    "Link": _make_link,
+    "TabPanels": _make_tab_panels,
+    "SubPages": _make_sub_pages,
 }
 
 # ``ui.notify`` is a function, not an element — it's handled by intercepting
@@ -281,7 +328,7 @@ FACTORIES: dict[str, Callable[[Any], Widget]] = {
 # These NiceGUI container elements are created implicitly by the framework but
 # aren't part of the user-facing API; skip rendering them and let their children
 # bubble up.
-INVISIBLE_TYPES = {"QLayout", "QPageContainer", "QPage", "SubPages"}
+INVISIBLE_TYPES = {"QLayout", "QPageContainer", "QPage"}
 
 
 def supported_types() -> set[str]:
