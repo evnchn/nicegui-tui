@@ -17,9 +17,10 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable
 
 from textual.app import App, ComposeResult
-from textual.containers import VerticalScroll
+from textual.containers import Vertical, VerticalScroll
+from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, Input, RadioSet, Select, Switch, TextArea
+from textual.widgets import Button, Checkbox, Input, RadioSet, Select, Static, Switch, TextArea
 
 from .checker import get_logger
 from .styles import tui_tcss
@@ -107,15 +108,23 @@ class TuiApp(App):
 
     async def on_mount(self) -> None:
         root = self.query_one("#ng-root", VerticalScroll)
-        # Mount from the page's ``content`` element rather than the
-        # ``q-layout`` wrapper, since the wrapper is not user-facing.
         client = self._tui_client.ng_client
-        content = client.content
         self._tui_client._widgets.clear()
-        for child in _iter_renderable(content):
+        # Mount the page's visible content in the scrollable root.
+        for child in _iter_renderable(client.content):
             widget = self._tui_client._build_tree(child)
             if widget is not None:
                 root.mount(widget)
+        # Also register dialogs (which live as children of ``layout`` rather
+        # than ``content``) so notify_element_changed can open them on demand.
+        content_id = client.content.id
+        for child in _iter_renderable(client.layout):
+            if child.id == content_id:
+                continue
+            sentinel = self._tui_client._build_tree(child)
+            if sentinel is not None:
+                sentinel.display = False
+                root.mount(sentinel)
 
     # -- event handlers: bridge Textual events back to NiceGUI -------------
 
@@ -179,6 +188,8 @@ class TuiClient:
         self.app: TuiApp | None = None
         self._widgets: dict[int, Widget] = {}
         self._pending_updates: list[int] = []
+        self._dialog_elements: dict[int, "Element"] = {}
+        self._open_dialog_screens: dict[int, ModalScreen] = {}
 
     # -- lifecycle --------------------------------------------------------
 
@@ -227,10 +238,18 @@ class TuiClient:
             return None
         if "tui-only" in classes:
             pass  # tui-only: render it in TUI (and browser CSS hides it)
+        # Dialogs are not mounted inline; they become ModalScreens on demand.
+        if type(element).__name__ == "Dialog":
+            self._dialog_elements[element.id] = element
+            sentinel = Static("", id=f"ng-dialog-sentinel-{element.id}")
+            sentinel.display = False
+            sentinel.ng_element_id = element.id  # type: ignore[attr-defined]
+            self._widgets[element.id] = sentinel
+            return sentinel
         widget = build_widget(element)
         self._widgets[element.id] = widget
         # Recurse into default-slot children for containers.
-        if type(element).__name__ in ("Row", "Column", "Card", "Dialog") or \
+        if type(element).__name__ in ("Row", "Column", "Card") or \
                 type(element).__name__ in INVISIBLE_TYPES:
             for child in _iter_renderable(element):
                 sub = self._build_tree(child)
@@ -266,13 +285,9 @@ class TuiClient:
         if widget is None:
             return
         try:
-            self.app.call_from_thread(self._apply_element_state, widget, element)
+            self._apply_element_state(widget, element)
         except Exception:
-            # If we're already on the app's thread, just run it.
-            try:
-                self._apply_element_state(widget, element)
-            except Exception:
-                log.exception("failed to apply element state")
+            log.exception("failed to apply element state")
 
     def _apply_element_state(self, widget: Widget, element: "Element") -> None:
         name = type(element).__name__
@@ -296,8 +311,69 @@ class TuiClient:
             widget.value = bool(element._props.get("model-value", False))
         elif name == "Switch" and isinstance(widget, NGSwitch):
             widget.value = bool(element._props.get("model-value", False))
+        elif name == "Dialog":
+            self._sync_dialog(element)
+            return  # sentinel stays hidden regardless of visibility
         # visibility
         widget.display = bool(getattr(element, "visible", True))
+
+    def _sync_dialog(self, element: "Element") -> None:
+        """Open/close a Textual ModalScreen to mirror the dialog's value prop."""
+        if self.app is None:
+            return
+        want_open = bool(element._props.get("model-value", False))
+        is_open = element.id in self._open_dialog_screens
+        if want_open and not is_open:
+            self._push_dialog_screen(element)
+        elif not want_open and is_open:
+            self._pop_dialog_screen(element)
+
+    def _push_dialog_screen(self, element: "Element") -> None:
+        tc = self
+        class _DialogScreen(ModalScreen):
+            DEFAULT_CSS = """
+            _DialogScreen {
+                align: center middle;
+            }
+            _DialogScreen > Vertical {
+                width: auto;
+                max-width: 80%;
+                height: auto;
+                max-height: 80%;
+                border: double $accent;
+                padding: 1 2;
+                background: $surface;
+            }
+            """
+
+            def compose(self) -> ComposeResult:
+                body = Vertical()
+                yield body
+
+            def on_mount(self_s) -> None:  # type: ignore[override]
+                body = self_s.query_one(Vertical)
+                for child in _iter_renderable(element):
+                    w = tc._build_tree(child)
+                    if w is not None:
+                        body.mount(w)
+                        for pending in getattr(w, "_pending_children", []):
+                            try:
+                                w.mount(pending)
+                            except Exception:
+                                pass
+
+        screen = _DialogScreen()
+        self._open_dialog_screens[element.id] = screen
+        self.app.push_screen(screen)
+
+    def _pop_dialog_screen(self, element: "Element") -> None:
+        screen = self._open_dialog_screens.pop(element.id, None)
+        if screen is None or self.app is None:
+            return
+        try:
+            self.app.pop_screen()
+        except Exception:
+            pass
 
     def notify_toast(self, data: dict) -> None:
         """Called for ui.notify messages on this client."""
