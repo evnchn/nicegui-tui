@@ -415,18 +415,26 @@ class TuiClient:
     def _fire_update_model_value(self, element: "Element", value: Any) -> None:
         """Dispatch the ``update:<model-prop>`` event NiceGUI uses for two-way
         bindings on Quasar components (input, checkbox, switch, radio, select).
+
+        The listener is registered with the raw ``update:<prop>`` type — we
+        match that string directly rather than trying to camel-case it.
         """
         from nicegui.elements.mixins.value_element import ValueElement
 
         if isinstance(element, ValueElement):
-            event_type = f"updateModelValue" if element.VALUE_PROP == "model-value" \
-                else f"update{element.VALUE_PROP.capitalize()}"
-            # NiceGUI converts "update:model-value" via helpers.event_type_to_camel_case
-            # which yields "updateModelValue"; for VALUE_PROP == 'value', it's 'updateValue'.
-            matching = [l for l in element._event_listeners.values() if l.type == event_type]
+            target_type = f"update:{element.VALUE_PROP}"
+            matching = [l for l in element._event_listeners.values() if l.type == target_type]
             if matching:
                 listener = matching[0]
                 element._handle_event({"listener_id": listener.id, "args": value})
+                # Drive NiceGUI's binding propagation synchronously so label
+                # bindings (``bind_text_from``, etc.) refresh immediately
+                # rather than waiting for the 100 ms refresh_loop tick.
+                try:
+                    from nicegui import binding as ng_binding
+                    ng_binding._refresh_step()
+                except Exception:
+                    pass
                 return
         # Fallback: try a plain 'change' event.
         self._fire_event(element, "change", [value])
