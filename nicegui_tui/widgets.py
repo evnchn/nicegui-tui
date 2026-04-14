@@ -128,7 +128,10 @@ def _text_of(element: "Element") -> str:
 
 
 def _make_label(element: "Element") -> Widget:
-    return _apply_common(NGLabel(_text_of(element)), element)
+    w = NGLabel(_text_of(element))
+    w.styles.width = "auto"
+    w.styles.height = "auto"
+    return _apply_common(w, element)
 
 
 def _make_markdown(element: "Element") -> Widget:
