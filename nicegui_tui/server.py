@@ -106,6 +106,14 @@ async def _start_server(port: int, host: str, host_key_path: str | None) -> asyn
         port,
         server_host_keys=server_host_keys,
         process_factory=_handle_session,
+        # Disable asyncssh's built-in line editor. With it enabled (the
+        # default), the server cooks input: lines are buffered until Enter,
+        # characters are echoed back to the client, and unrecognised escape
+        # sequences (notably xterm mouse-report CSI bytes) are bounced
+        # straight to the client's terminal. Textual needs raw byte-at-a-time
+        # input and expects to own the display entirely, so we turn the
+        # editor off here rather than per-channel.
+        line_editor=False,
     )
     log.info("nicegui-tui SSH server listening on %s:%d", host, port)
     return acceptor
