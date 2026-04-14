@@ -275,6 +275,17 @@ def _make_dialog(element: "Element") -> Widget:
     return _apply_common(w, element)
 
 
+def _make_sub_pages(element: "Element") -> Widget:
+    """Render a ui.sub_pages as a Vertical container; its current children
+    correspond to whichever route builder ran.
+    """
+    w = NGColumn()
+    w.styles.height = "auto"
+    w.styles.width = "1fr"
+    w.add_class("tcss-border")
+    return _apply_common(w, element)
+
+
 def _make_tab_panels(element: "Element") -> Widget:
     """Skeleton TabbedContent. Panes are mounted by the client after this returns."""
     w = NGTabbedContent()
@@ -308,6 +319,7 @@ FACTORIES: dict[str, Callable[[Any], Widget]] = {
     "Notification": _make_label,  # rendered as a small label; see server.py for toasts
     "Link": _make_link,
     "TabPanels": _make_tab_panels,
+    "SubPages": _make_sub_pages,
 }
 
 # ``ui.notify`` is a function, not an element — it's handled by intercepting
@@ -316,7 +328,7 @@ FACTORIES: dict[str, Callable[[Any], Widget]] = {
 # These NiceGUI container elements are created implicitly by the framework but
 # aren't part of the user-facing API; skip rendering them and let their children
 # bubble up.
-INVISIBLE_TYPES = {"QLayout", "QPageContainer", "QPage", "SubPages"}
+INVISIBLE_TYPES = {"QLayout", "QPageContainer", "QPage"}
 
 
 def supported_types() -> set[str]:

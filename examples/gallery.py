@@ -27,6 +27,7 @@ def index() -> None:
         ui.tab("layout", label="Layout")
         ui.tab("dialog", label="Dialog")
         ui.tab("binding", label="Binding")
+        ui.tab("routes", label="Routes")
         ui.tab("misc", label="Misc")
 
     with ui.tab_panels(tabs, value="basics"):
@@ -104,6 +105,33 @@ def index() -> None:
                 src, "value",
                 backward=lambda v: (v or "")[::-1],
             ).classes("tcss-primary tcss-bold")
+
+        # -- routes (ui.sub_pages) --------------------------------------
+        with ui.tab_panel("routes"):
+            ui.markdown(
+                "`ui.sub_pages` swaps content without a URL change. "
+                "In the TUI, press **Ctrl+P** to pick a route."
+            )
+
+            def _home():
+                ui.label("home view").classes("tcss-primary tcss-bold")
+                ui.markdown("This is the `/` route.")
+
+            def _about():
+                ui.label("about view").classes("tcss-success tcss-bold")
+                ui.markdown("This is the `/about` route. Press **Ctrl+P** to switch again.")
+
+            def _settings():
+                ui.label("settings view").classes("tcss-warning tcss-bold")
+                with ui.card().classes("tcss-border tcss-padded"):
+                    ui.checkbox("Notifications on")
+                    ui.switch("Dark mode")
+
+            ui.sub_pages({
+                "/": _home,
+                "/about": _about,
+                "/settings": _settings,
+            }).classes("tcss-padded")
 
         # -- misc (opt-out + unsupported) ------------------------------
         with ui.tab_panel("misc"):

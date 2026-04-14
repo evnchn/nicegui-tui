@@ -17,10 +17,11 @@ import logging
 from typing import TYPE_CHECKING, Any, Callable
 
 from textual.app import App, ComposeResult
+from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widget import Widget
-from textual.widgets import Button, Checkbox, Input, RadioSet, Select, Static, Switch, TextArea
+from textual.widgets import Button, Checkbox, Input, Label, ListItem, ListView, RadioSet, Select, Static, Switch, TextArea
 
 from .checker import get_logger
 from .styles import tui_tcss
@@ -94,14 +95,60 @@ def install_hooks() -> None:
 # ---------------------------------------------------------------------------
 
 
+class _RoutePickerScreen(ModalScreen):
+    DEFAULT_CSS = """
+    _RoutePickerScreen { align: center middle; }
+    _RoutePickerScreen > Vertical {
+        width: 60%;
+        height: auto;
+        max-height: 80%;
+        border: double $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    _RoutePickerScreen ListView { height: auto; max-height: 20; }
+    """
+
+    BINDINGS = [Binding("escape", "app.pop_screen", "Close", show=True)]
+
+    def __init__(self, routes: list[tuple[int, str]], tc: "TuiClient") -> None:
+        super().__init__()
+        self._routes = routes
+        self._tc = tc
+
+    def compose(self) -> ComposeResult:
+        body = Vertical()
+        with body:
+            yield Label("Pick a route (Enter to navigate, Esc to cancel)")
+            items = [ListItem(Label(f"{path}  —  sub_pages #{sp_id}")) for sp_id, path in self._routes]
+            yield ListView(*items, id="route-list")
+
+    def on_list_view_selected(self, event: ListView.Selected) -> None:
+        index = event.list_view.index or 0
+        if 0 <= index < len(self._routes):
+            sp_id, path = self._routes[index]
+            self.app.pop_screen()
+            self._tc.navigate_sub_pages(sp_id, path)
+
+
 class TuiApp(App):
     """Textual app rendering a NiceGUI client."""
 
     CSS = tui_tcss()
+    BINDINGS = [
+        Binding("ctrl+p", "open_routes", "Routes", show=True, priority=True),
+    ]
 
     def __init__(self, tui_client: "TuiClient", **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._tui_client = tui_client
+
+    def action_open_routes(self) -> None:
+        routes = self._tui_client.collect_sub_page_routes()
+        if not routes:
+            self.notify("No ui.sub_pages routes found.", severity="warning")
+            return
+        self.push_screen(_RoutePickerScreen(routes, self._tui_client))
 
     def compose(self) -> ComposeResult:
         yield VerticalScroll(id="ng-root")
@@ -190,6 +237,7 @@ class TuiClient:
         self._pending_updates: list[int] = []
         self._dialog_elements: dict[int, "Element"] = {}
         self._open_dialog_screens: dict[int, ModalScreen] = {}
+        self._sub_pages_elements: dict[int, "Element"] = {}
 
     # -- lifecycle --------------------------------------------------------
 
@@ -253,10 +301,12 @@ class TuiClient:
             return None
         if name == "TabPanels":
             return self._build_tab_panels(element)
+        if name == "SubPages":
+            self._sub_pages_elements[element.id] = element
         widget = build_widget(element)
         self._widgets[element.id] = widget
         # Recurse into default-slot children for containers.
-        if name in ("Row", "Column", "Card") or name in INVISIBLE_TYPES:
+        if name in ("Row", "Column", "Card", "SubPages") or name in INVISIBLE_TYPES:
             for child in _iter_renderable(element):
                 sub = self._build_tree(child)
                 if sub is not None:
@@ -271,6 +321,65 @@ class TuiClient:
                         pass
             widget.call_after_refresh(_mount_children)  # type: ignore[attr-defined]
         return widget
+
+    def collect_sub_page_routes(self) -> list[tuple[int, str]]:
+        """Return [(sub_pages_element_id, path)] across all ui.sub_pages."""
+        out: list[tuple[int, str]] = []
+        for sp_id, sp in self._sub_pages_elements.items():
+            for path in getattr(sp, "_routes", {}).keys():
+                out.append((sp_id, path))
+        return out
+
+    def navigate_sub_pages(self, sp_id: int, path: str) -> None:
+        """Clear the sub_pages element's children, run the matching builder,
+        and rebuild the corresponding Textual subtree.
+        """
+        if self.app is None or self.ng_client is None:
+            return
+        sp = self._sub_pages_elements.get(sp_id)
+        if sp is None:
+            return
+        builder = sp._routes.get(path)
+        if builder is None:
+            self.app.notify(f"route not found: {path}", severity="error")
+            return
+        widget = self._widgets.get(sp_id)
+        if widget is None:
+            return
+        # Clear NG children + Textual children.
+        try:
+            sp.clear()
+        except Exception:
+            log.exception("sp.clear() failed")
+        try:
+            widget.remove_children()
+        except Exception:
+            pass
+        # Re-run builder inside the SubPages element context.
+        with self.ng_client:
+            with sp:
+                try:
+                    builder()
+                except TypeError:
+                    # Builder may accept path kwargs; for POC just call no-args.
+                    pass
+        # Rebuild TUI subtree
+        for child in _iter_renderable(sp):
+            sub = self._build_tree(child)
+            if sub is not None:
+                try:
+                    widget.mount(sub)
+                    for pending in getattr(sub, "_pending_children", []):
+                        try:
+                            sub.mount(pending)
+                        except Exception:
+                            pass
+                except Exception:
+                    log.exception("failed to mount after navigation")
+        try:
+            self.app.notify(f"→ {path}", severity="information")
+        except Exception:
+            pass
 
     def _collect_tab_labels(self) -> dict[str, str]:
         """Scan client elements for all Tab elements and return name -> label."""
