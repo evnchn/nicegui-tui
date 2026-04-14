@@ -4,14 +4,25 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nicegui-tui"
-version = "0.1.0"
-description = "Bridge a NiceGUI app to a Textual TUI served over SSH."
+version = "0.0.1"
+description = "Bridge a NiceGUI app to a Textual TUI served over SSH (no NiceGUI source edits)."
 readme = "README.md"
 requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Evan Chan"}]
+keywords = ["nicegui", "textual", "tui", "ssh", "bridge"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: User Interfaces",
+]
 dependencies = [
-    "nicegui==3.10.0",
-    "textual==8.2.3",
-    "asyncssh==2.22.0",
+    "nicegui>=3.10",
+    "textual>=8.2",
+    "asyncssh>=2.22",
 ]
 
 [project.optional-dependencies]
