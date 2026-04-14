@@ -1,0 +1,2 @@
+[console_scripts]
+nicegui-tui = nicegui_tui.lint:main

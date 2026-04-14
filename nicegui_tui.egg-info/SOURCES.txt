@@ -1,0 +1,16 @@
+README.md
+pyproject.toml
+nicegui_tui/__init__.py
+nicegui_tui/checker.py
+nicegui_tui/client.py
+nicegui_tui/server.py
+nicegui_tui/ssh_driver.py
+nicegui_tui/styles.py
+nicegui_tui/widgets.py
+nicegui_tui.egg-info/PKG-INFO
+nicegui_tui.egg-info/SOURCES.txt
+nicegui_tui.egg-info/dependency_links.txt
+nicegui_tui.egg-info/entry_points.txt
+nicegui_tui.egg-info/requires.txt
+nicegui_tui.egg-info/top_level.txt
+tests/test_e2e.py
