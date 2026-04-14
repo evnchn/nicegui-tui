@@ -36,17 +36,28 @@ def index() -> None:
         state["count"] += 1
         count_label.set_text(f"count: {state['count']}")
 
-    # --- form controls --------------------------------------------------
+    # --- form controls with selection loopback --------------------------
+    # Each control echoes its current value to a label via bind_text_from.
     with ui.card().classes("tcss-border tcss-padded"):
-        ui.label("Form controls").classes("tcss-bold")
-        ui.input("Name", placeholder="type something",
-                 on_change=lambda e: state.update(last_input=e.value))
-        ui.textarea("Notes", placeholder="...")
-        ui.checkbox("Accept terms",
-                    on_change=lambda e: state.update(accepted=bool(e.value)))
-        ui.switch("Enable feature")
-        ui.radio(["alpha", "beta", "gamma"], value="alpha")
-        ui.select(["red", "green", "blue"], value="red")
+        ui.label("Form controls (each echoes into a label)").classes("tcss-bold")
+
+        name = ui.input("Name", placeholder="type something")
+        ui.label().bind_text_from(name, "value", backward=lambda v: f"name = {v!r}").classes("tcss-muted")
+
+        notes = ui.textarea("Notes", placeholder="...")
+        ui.label().bind_text_from(notes, "value", backward=lambda v: f"notes length = {len(v or '')}").classes("tcss-muted")
+
+        accept = ui.checkbox("Accept terms")
+        ui.label().bind_text_from(accept, "value", backward=lambda v: f"accepted = {bool(v)}").classes("tcss-muted")
+
+        feature = ui.switch("Enable feature")
+        ui.label().bind_text_from(feature, "value", backward=lambda v: f"feature = {bool(v)}").classes("tcss-muted")
+
+        choice = ui.radio(["alpha", "beta", "gamma"], value="alpha")
+        ui.label().bind_text_from(choice, "value", backward=lambda v: f"radio = {v}").classes("tcss-muted")
+
+        color = ui.select(["red", "green", "blue"], value="red")
+        ui.label().bind_text_from(color, "value", backward=lambda v: f"color = {v}").classes("tcss-muted")
 
     # --- layout ---------------------------------------------------------
     with ui.column().classes("tcss-padded"):

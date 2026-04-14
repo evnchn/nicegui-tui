@@ -17,6 +17,7 @@ from textual.widgets import (
     Checkbox,
     Input,
     Label,
+    Markdown,
     RadioButton,
     RadioSet,
     Rule,
@@ -49,7 +50,7 @@ class NGLabel(Static, BridgedMixin):
     pass
 
 
-class NGMarkdown(Static, BridgedMixin):
+class NGMarkdown(Markdown, BridgedMixin):
     pass
 
 
