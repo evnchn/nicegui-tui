@@ -422,7 +422,11 @@ class TuiClient:
         from nicegui.elements.mixins.value_element import ValueElement
 
         if isinstance(element, ValueElement):
-            target_type = f"update:{element.VALUE_PROP}"
+            # NiceGUI registers the listener with the camelCased prop name:
+            # 'model-value' -> 'update:modelValue', 'value' -> 'update:value'.
+            parts = element.VALUE_PROP.split("-")
+            camel = parts[0] + "".join(p.capitalize() for p in parts[1:])
+            target_type = f"update:{camel}"
             matching = [l for l in element._event_listeners.values() if l.type == target_type]
             if matching:
                 listener = matching[0]
