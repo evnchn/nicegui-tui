@@ -43,6 +43,44 @@ async def test_sub_pages_renders_default_route() -> None:
 
 
 @pytest.mark.asyncio
+async def test_ctrl_p_route_picker_navigates() -> None:
+    def home():
+        ui.label("HOME_BODY")
+
+    def about():
+        ui.label("ABOUT_BODY")
+
+    def page():
+        ui.sub_pages({"/": home, "/about": about})
+
+    tc = TuiClient(page)
+    tc.build()
+    app = tc.build_app()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await pilot.pause()
+        await pilot.press("ctrl+p")
+        await pilot.pause()
+        assert len(app.screen_stack) >= 2, app.screen_stack
+        from textual.widgets import ListView
+        lv = next(iter(app.screen.query(ListView)))
+        # Select the /about entry (index depends on dict order; find it).
+        for i, item in enumerate(lv.children):
+            if "about" in str(item.render_str("") if hasattr(item, "render_str") else "").lower() \
+               or "about" in str([c.render() for c in item.children if hasattr(c, "render")]):
+                lv.index = i
+                break
+        else:
+            lv.index = 1  # fall back: second entry
+        await pilot.pause()
+        await pilot.press("enter")
+        await pilot.pause()
+        from textual.widgets import Static
+        text = " ".join(str(s.render()) for s in app.query(Static))
+        assert "ABOUT_BODY" in text, text
+    tc.dispose()
+
+
+@pytest.mark.asyncio
 async def test_sub_pages_navigate_swaps_content() -> None:
     def home():
         ui.label("HOME_BODY")
