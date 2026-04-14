@@ -238,23 +238,28 @@ class TuiClient:
             return None
         if "tui-only" in classes:
             pass  # tui-only: render it in TUI (and browser CSS hides it)
+        name = type(element).__name__
         # Dialogs are not mounted inline; they become ModalScreens on demand.
-        if type(element).__name__ == "Dialog":
+        if name == "Dialog":
             self._dialog_elements[element.id] = element
             sentinel = Static("", id=f"ng-dialog-sentinel-{element.id}")
             sentinel.display = False
             sentinel.ng_element_id = element.id  # type: ignore[attr-defined]
             self._widgets[element.id] = sentinel
             return sentinel
+        # Tabs is metadata (source of labels); don't render it. TabPanels
+        # rendering drives the actual TabbedContent.
+        if name == "Tabs":
+            return None
+        if name == "TabPanels":
+            return self._build_tab_panels(element)
         widget = build_widget(element)
         self._widgets[element.id] = widget
         # Recurse into default-slot children for containers.
-        if type(element).__name__ in ("Row", "Column", "Card") or \
-                type(element).__name__ in INVISIBLE_TYPES:
+        if name in ("Row", "Column", "Card") or name in INVISIBLE_TYPES:
             for child in _iter_renderable(element):
                 sub = self._build_tree(child)
                 if sub is not None:
-                    # Mount pending children when the widget is mounted.
                     widget._pending_children = getattr(widget, "_pending_children", [])
                     widget._pending_children.append(sub)
 
@@ -266,6 +271,64 @@ class TuiClient:
                         pass
             widget.call_after_refresh(_mount_children)  # type: ignore[attr-defined]
         return widget
+
+    def _collect_tab_labels(self) -> dict[str, str]:
+        """Scan client elements for all Tab elements and return name -> label."""
+        labels: dict[str, str] = {}
+        if self.ng_client is None:
+            return labels
+        for el in self.ng_client.elements.values():
+            if type(el).__name__ == "Tab":
+                nm = el._props.get("name") or ""
+                lbl = el._props.get("label") or nm
+                if nm:
+                    labels[str(nm)] = str(lbl)
+        return labels
+
+    def _build_tab_panels(self, element: "Element") -> Widget | None:
+        from .widgets import NGTabbedContent, NGTabPane
+        tc = NGTabbedContent()
+        tc.styles.height = "auto"
+        tc.ng_element_id = element.id  # type: ignore[attr-defined]
+        self._widgets[element.id] = tc
+
+        labels = self._collect_tab_labels()
+        pending_panes: list[tuple[NGTabPane, list[Widget]]] = []
+
+        for child in _iter_renderable(element):
+            if type(child).__name__ != "TabPanel":
+                continue
+            nm = str(child._props.get("name") or "")
+            title = labels.get(nm, nm or "tab")
+            pane = NGTabPane(title)
+            pane.ng_element_id = child.id  # type: ignore[attr-defined]
+            self._widgets[child.id] = pane
+
+            pane_children: list[Widget] = []
+            for sub_el in _iter_renderable(child):
+                w = self._build_tree(sub_el)
+                if w is not None:
+                    pane_children.append(w)
+            pending_panes.append((pane, pane_children))
+
+        def _mount_panes(container=tc, panes=pending_panes):
+            for pane, kids in panes:
+                try:
+                    container.add_pane(pane)
+                    for k in kids:
+                        try:
+                            pane.mount(k)
+                            for pk in getattr(k, "_pending_children", []):
+                                try:
+                                    k.mount(pk)
+                                except Exception:
+                                    pass
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        tc.call_after_refresh(_mount_panes)
+        return tc
 
     def _element_for_widget(self, widget: Widget) -> "Element | None":
         eid = getattr(widget, "ng_element_id", -1)

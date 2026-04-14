@@ -63,7 +63,8 @@ async def _handle_session(process: asyncssh.SSHServerProcess) -> None:
         process.exit(1)
         return
 
-    builder = next(iter(_REGISTERED_BUILDERS.values()))
+    # Prefer the '/' route when registered; otherwise fall back to the first.
+    builder = _REGISTERED_BUILDERS.get("/") or next(iter(_REGISTERED_BUILDERS.values()))
 
     term_size = process.get_terminal_size()
     size = (term_size[0] or 80, term_size[1] or 24)
