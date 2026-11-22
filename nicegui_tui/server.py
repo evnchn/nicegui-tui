@@ -40,17 +40,6 @@ class _TUIServer(asyncssh.SSHServer):
     def begin_auth(self, username: str) -> bool:  # noqa: ARG002
         return _AUTHORIZED_KEYS is not None
 
-    def password_auth_supported(self) -> bool:
-        return False
-
-    def public_key_auth_supported(self) -> bool:
-        return _AUTHORIZED_KEYS is not None
-
-    def validate_public_key(self, username: str, key: asyncssh.SSHKey) -> bool:  # noqa: ARG002
-        if _AUTHORIZED_KEYS is None:
-            return True
-        return _AUTHORIZED_KEYS.validate(key, username, None, None)
-
 
 async def _handle_session(process: asyncssh.SSHServerProcess) -> None:
     """Per-connection handler: build a TuiClient + Textual App, run it."""
@@ -116,6 +105,7 @@ async def _start_server(port: int, host: str, host_key_path: str | None) -> asyn
         port,
         server_host_keys=server_host_keys,
         process_factory=_handle_session,
+        authorized_client_keys=_AUTHORIZED_KEYS,
         # Disable asyncssh's built-in line editor. With it enabled (the
         # default), the server cooks input: lines are buffered until Enter,
         # characters are echoed back to the client, and unrecognised escape
